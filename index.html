@@ -4,73 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>災害情報掲示板</title>
+<!-- Font Awesomeアイコン -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-  body {
-    font-family: 'Helvetica', 'Arial', sans-serif;
-    background: linear-gradient(to bottom, #a1c4fd, #c2e9fb);
-    margin: 0;
-    padding: 20px;
-    color: #333;
-  }
-
-  h1 { text-align: center; margin-bottom: 30px; color: #fff; text-shadow: 1px 1px 4px #555; }
-  h2 { margin-bottom: 10px; color: #333; }
-
-  .section { margin-bottom: 30px; }
-
-  .quake {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    padding: 15px;
-    margin-bottom: 12px;
-    border-radius: 12px;
-    box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-    background: rgba(255,255,255,0.9);
-    transition: transform 0.3s, box-shadow 0.3s;
-  }
-
-  .quake:hover { transform: translateY(-3px); box-shadow: 4px 4px 15px rgba(0,0,0,0.2); }
-
-  .quake-icon { font-size: 2em; margin-right: 15px; }
-
-  .quake-info { flex: 1; }
-  .time { font-size: 0.8em; color: #666; }
-  .place { font-weight: bold; font-size: 1.1em; margin-bottom: 5px; }
-
-  .scale-1 { background-color: #d0f0fd; }
-  .scale-2 { background-color: #a0e0fc; }
-  .scale-3 { background-color: #70ccec; }
-  .scale-4 { background-color: #40b4e0; color:#fff; }
-  .scale-5- { background-color: #0096c7; color:#fff; }
-  .scale-5+ { background-color: #0077b6; color:#fff; }
-  .scale-6- { background-color: #005f73; color:#fff; }
-  .scale-6+ { background-color: #003d5b; color:#fff; }
-  .scale-7 { background-color: #001f3f; color:#fff; }
-
-  .quake-magnitude, .quake-depth, .quake-maxscale {
-    font-size: 0.9em;
-    margin-top: 2px;
-  }
-
+  body { margin:0; font-family:sans-serif; background:linear-gradient(to bottom,#87ceeb,#f0f8ff); color:#333; }
+  h1 { text-align:center; padding:10px; }
+  .container { max-width:900px; margin:0 auto; padding:10px; }
+  .quake { background:#fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.2); margin:10px 0; padding:12px; display:flex; align-items:center; transition: transform 0.3s; }
+  .quake:hover { transform: translateY(-5px); }
+  .quake-icon { font-size:32px; margin-right:12px; color:#f39c12; }
+  .quake-info div { margin:2px 0; }
+  .scale-1 { border-left:6px solid #cceeff; }
+  .scale-2 { border-left:6px solid #99ddff; }
+  .scale-3 { border-left:6px solid #66ccff; }
+  .scale-4 { border-left:6px solid #33bbff; }
+  .scale-5minus { border-left:6px solid #ffdd66; }
+  .scale-5plus { border-left:6px solid #ffaa33; }
+  .scale-6minus { border-left:6px solid #ff7733; }
+  .scale-6plus { border-left:6px solid #ff3333; }
+  .scale-7 { border-left:6px solid #cc0000; }
 </style>
 </head>
 <body>
-
-<h1><i class="fa-solid fa-cloud-bolt"></i> 災害情報掲示板</h1>
-
-<div class="section">
-  <h2><i class="fa-solid fa-earthquake"></i> 最新地震情報（5件）</h2>
+<h1>災害情報掲示板</h1>
+<div class="container">
+  <h2>最新地震情報</h2>
   <div id="quakeList">読み込み中...</div>
-</div>
-
-<div class="section">
-  <h2><i class="fa-solid fa-bolt"></i> 緊急地震速報（EEW）</h2>
+  <h2>緊急地震速報（EEW）</h2>
   <div id="eewList">読み込み中...</div>
 </div>
-
-<script src="main.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
