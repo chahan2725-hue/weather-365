@@ -1,37 +1,267 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>weather-365 災害情報掲示板</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;margin:0;padding:18px;background:#f4f6fb;color:#111}
-    header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-    h1{margin:0;font-size:20px}
-    .badge{background:#e53935;color:#fff;padding:4px 8px;border-radius:6px;font-weight:700}
-    #meta{margin-top:10px;color:#666;font-size:13px}
-    #list{margin-top:16px}
-    .item{background:#fff;padding:12px;margin-bottom:10px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
-    .time{color:#666;font-size:12px}
-    .type{font-weight:700}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>weather-365 — 地震情報（P2P）表示 & コピー</title>
+<style>
+  :root{--card-bg:#fff;--bg:#f4f6fb;--muted:#666}
+  body{font-family: system-ui, "Noto Sans JP", sans-serif; margin:0; padding:18px; background:var(--bg); color:#111}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:20px}
+  .badge{background:#e53935;color:#fff;padding:4px 8px;border-radius:6px;font-weight:700}
+  .controls{margin-top:10px}
+  .controls button{margin-right:8px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer}
+  #meta{margin-top:8px;color:var(--muted);font-size:13px}
+  .list{margin-top:16px;display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--card-bg);padding:12px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.06);position:relative}
+  .card h3{margin:0 0 6px 0;font-size:16px}
+  .small{font-size:13px;color:var(--muted)}
+  pre{white-space:pre-wrap;margin:8px 0;background:#fafafa;padding:10px;border-radius:6px;border:1px solid #eee;overflow:auto}
+  .btn-row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .btn{padding:6px 10px;border-radius:6px;border:0;background:#1976d2;color:white;cursor:pointer}
+  .btn.secondary{background:#6b7280}
+  .tag{display:inline-block;padding:3px 8px;border-radius:999px;background:#eee;font-size:12px;margin-right:6px}
+  footer{margin-top:18px;font-size:12px;color:var(--muted)}
+  .error{color:#b00020}
+</style>
 </head>
 <body>
   <header>
-    <h1>weather-365 災害情報掲示板</h1>
-    <div class="badge">自動更新・通知対応</div>
+    <h1>weather-365 — 地震情報（P2P）</h1>
+    <div class="badge">自動取得 & コピー対応</div>
   </header>
 
-  <div id="meta">データソース: テスト用</div>
+  <div id="meta">データ: P2P地震情報 API（最新5件） — 自動更新: 30秒</div>
+  <div class="controls">
+    <button id="refreshBtn">手動リロード</button>
+    <button id="copyAllBtn">コピー ALL</button>
+    <span id="status" class="small"></span>
+  </div>
 
-  <section id="list">
-    <div class="item">読み込み中…</div>
+  <section class="list" id="list">
+    <div class="card"><div class="small">読み込み中…</div></div>
   </section>
 
-  <footer style="margin-top:18px;font-size:12px;color:#666">
-    注意: ブラウザ通知はページを開いている間のみ届きます。
-  </footer>
+  <footer>注意: コピーは表示されたテキストそのまま。メール送信は行いません。</footer>
 
-  <script src="/app.js"></script>
+<script>
+/*
+  weather-365: P2P地震情報をブラウザで取得して表示（個別コピー付き）
+  API: https://api.p2pquake.net/v2/history?codes=551&limit=5
+*/
+
+const API_URL = 'https://api.p2pquake.net/v2/history?codes=551&limit=5';
+const REFRESH_MS = 30 * 1000; // 30秒
+let lastFetched = 0;
+let latestItems = [];
+
+// ユーティリティ
+function fmtDate(ts){
+  try {
+    const d = new Date(Number(ts));
+    return d.toLocaleString();
+  } catch(e){ return String(ts); }
+}
+function escapeHtml(s){
+  if(s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function scaleToText(scale){
+  const map = {10:'1',20:'2',30:'3',40:'4',45:'5-',50:'5+',55:'6-',60:'6+',70:'7'};
+  return (scale == null || scale < 0) ? '不明' : (map[scale] || '不明');
+}
+
+// APIから取得して描画
+async function fetchAndRender(force=false){
+  const now = Date.now();
+  if(!force && now - lastFetched < 5000) return; // 連打防止
+  setStatus('取得中...');
+  try{
+    const res = await fetch(API_URL, {cache: 'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    // data は配列（最新から）
+    latestItems = Array.isArray(data) ? data : [];
+    lastFetched = Date.now();
+    renderList(latestItems);
+    setStatus('最終取得: ' + new Date(lastFetched).toLocaleTimeString());
+  }catch(err){
+    console.error(err);
+    document.getElementById('list').innerHTML = `<div class="card error">取得エラー: ${escapeHtml(err.message || err)}</div>`;
+    setStatus('取得エラー');
+  }
+}
+
+// 各アイテムから表示用テキストをつくる（メール版の本文イメージ）
+function makeTextForItem(item){
+  // item structure from P2P: item.earthquake, item.issue?.type, item.points etc.
+  const eq = item.earthquake || {};
+  const h = eq.hypocenter || {};
+  const time = item.time || eq.time || Date.now();
+  const place = h.name || '不明';
+  const maxScale = scaleToText(eq.maxScale);
+  const magnitude = (h.magnitude != null && h.magnitude >= 0) ? (Math.round(h.magnitude*10)/10).toFixed(1) : '不明';
+  const depth = (h.depth == null || h.depth < 0) ? '不明' : (h.depth === 0 ? 'ごく浅い' : (h.depth + ' km'));
+  const issueType = item.issue?.type || '';
+  // tsunami flags (domestic/foreign)
+  const d = eq.domesticTsunami;
+  const f = eq.foreignTsunami;
+  let tsunamiText = '';
+  if(d === 'Warning' || d === 'Watch') tsunamiText = '津波に関する情報を発表しています。';
+  else if(d === 'NonEffective') tsunamiText = '津波予報(若干の海面変動)を発表していますが、被害の心配はありません。';
+  else if(d === 'None') tsunamiText = (f==='Warning' || f==='Watch') ? 'この地震による国内での津波の心配はありません。' : 'この地震による津波の心配はありません。';
+  else if(d === 'Checking') tsunamiText = 'この地震による津波の有無を現在調査中です。';
+  else if(d === 'Unknown') tsunamiText = 'この地震による津波の有無は不明です。';
+
+  // build area intensity summary (if points exist) - similar to buildAreaText in GAS but simplified
+  let intensityText = '';
+  if(item.points && item.points.length){
+    // group by scale text -> pref -> cities (we'll show up to some items)
+    const cityMax = {};
+    item.points.forEach(p=>{
+      const scaleText = scaleToText(p.scale);
+      const cityMatch = (p.addr || '').match(/(.+?[市区町村])/);
+      const city = cityMatch ? cityMatch[1] : (p.addr || '不明');
+      const pref = (p.pref || p.addr || '').split('県')[0] || '';
+      const key = `${p.pref || '不明'}:${city}`;
+      if(!cityMax[key] || compareScale(scaleText, cityMax[key]) > 0) cityMax[key] = scaleText;
+    });
+    const grouped = {};
+    Object.keys(cityMax).forEach(k=>{
+      const [pref, city] = k.split(':');
+      const scale = cityMax[k];
+      if(!grouped[scale]) grouped[scale] = {};
+      if(!grouped[scale][pref]) grouped[scale][pref] = [];
+      grouped[scale][pref].push(city);
+    });
+    const order = ['7','6+','6-','5+','5-','4','3','2','1','不明'];
+    order.forEach(s=>{
+      if(grouped[s]){
+        intensityText += `\n◁震度${s}▷\n`;
+        Object.keys(grouped[s]).forEach(pref=>{
+          intensityText += `【${pref}】\n${grouped[s][pref].slice(0,30).join('、')}\n`;
+        });
+      }
+    });
+  } else {
+    intensityText = '\n◁震度情報不明▷\n';
+  }
+
+  const updateTime = (item.time) ? new Date(Number(item.time)).toLocaleString() : new Date().toLocaleString();
+
+  // choose template by issue type (approx)
+  let header = '《地震情報》';
+  if(issueType === 'ScalePrompt') header = '《震度速報》';
+  else if(issueType === 'Destination') header = '《震源速報》';
+  else if(issueType === 'DetailScale') header = '《地震情報（詳細）》';
+  else if(issueType === 'Foreign') header = '《遠地地震情報》';
+
+  const body = `${header}
+発生時刻: ${fmtDate(time)}
+震源地: ${place}
+最大震度: ${maxScale}
+マグニチュード: ${magnitude}
+深さ: ${depth}
+${tsunamiText}
+
+◆各地の震度◆
+${intensityText}
+
+出典：P2P地震情報API`;
+
+  return body;
+}
+
+function compareScale(a,b){
+  const order = {'1':10,'2':20,'3':30,'4':40,'5-':45,'5+':50,'6-':55,'6+':60,'7':70,'不明':0};
+  return (order[a]||0) - (order[b]||0);
+}
+
+// 描画
+function renderList(items){
+  const listEl = document.getElementById('list');
+  listEl.innerHTML = '';
+  if(!items || items.length === 0){
+    listEl.innerHTML = '<div class="card">現在、表示する地震情報はありません。</div>';
+    return;
+  }
+
+  items.forEach((it, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const title = it.earthquake?.hypocenter?.name || '震源地不明';
+    const time = it.time || it.earthquake?.time || Date.now();
+    const maxScale = scaleToText(it.earthquake?.maxScale);
+    const mag = (it.earthquake?.hypocenter && it.earthquake.hypocenter.magnitude != null) ? (Math.round(it.earthquake.hypocenter.magnitude*10)/10).toFixed(1) : '不明';
+
+    const h3 = document.createElement('h3');
+    h3.innerHTML = `${escapeHtml(title)} <span class="small">(${new Date(Number(time)).toLocaleString()})</span>`;
+    card.appendChild(h3);
+
+    const meta = document.createElement('div');
+    meta.className = 'small';
+    meta.innerHTML = `<span class="tag">Max:${escapeHtml(maxScale)}</span> <span class="tag">M${escapeHtml(mag)}</span> <span class="tag">${escapeHtml(it.issue?.type || '')}</span>`;
+    card.appendChild(meta);
+
+    const txt = makeTextForItem(it);
+    const pre = document.createElement('pre');
+    pre.textContent = txt;
+    card.appendChild(pre);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'btn-row';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn';
+    copyBtn.textContent = 'コピー';
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(txt);
+        setStatus('コピーしました');
+      } catch(e){
+        alert('コピー失敗: ' + e);
+      }
+    };
+    const copyMarkdownBtn = document.createElement('button');
+    copyMarkdownBtn.className = 'btn secondary';
+    copyMarkdownBtn.textContent = 'COPY (Markdown)';
+    copyMarkdownBtn.onclick = async () => {
+      const md = `\`\`\`\n${txt}\n\`\`\``;
+      try{ await navigator.clipboard.writeText(md); setStatus('Markdown 形式でコピーしました'); }catch(e){ alert('コピー失敗: '+e); }
+    };
+
+    btnRow.appendChild(copyBtn);
+    btnRow.appendChild(copyMarkdownBtn);
+    card.appendChild(btnRow);
+
+    listEl.appendChild(card);
+  });
+}
+
+// copy all displayed items
+async function copyAll(){
+  if(!latestItems || latestItems.length===0){ alert('コピーする情報がありません'); return; }
+  const allText = latestItems.map(i=>makeTextForItem(i)).join('\n\n----\n\n');
+  try {
+    await navigator.clipboard.writeText(allText);
+    setStatus('全件コピーしました');
+  } catch(e){
+    alert('コピー失敗: ' + e);
+  }
+}
+
+function setStatus(s){
+  const el = document.getElementById('status');
+  el.textContent = s || '';
+}
+
+// wire up buttons
+document.getElementById('refreshBtn').addEventListener('click', ()=>fetchAndRender(true));
+document.getElementById('copyAllBtn').addEventListener('click', copyAll);
+
+// initial + loop
+fetchAndRender();
+setInterval(fetchAndRender, REFRESH_MS);
+</script>
 </body>
 </html>
